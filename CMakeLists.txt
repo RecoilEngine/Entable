@@ -106,9 +106,6 @@ if(MSVC)
     if(TARGET ${target})
       # Works automatically with the Visual Studio generator
       target_sources(${target} PRIVATE "${NATVIS_FILE}")
-
-      # Also embed into PDB for Ninja + MSVC builds
-      target_link_options(${target} PRIVATE "/NATVIS:${NATVIS_FILE}")
     endif()
   endforeach()
 
