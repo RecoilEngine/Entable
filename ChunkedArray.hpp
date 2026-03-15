@@ -348,7 +348,7 @@ namespace entable {
 
         // Pre-allocates chunk memory for at least count elements without constructing any.
         void reserve(size_t count) {
-            if (count == 0) [[unlikely]] return;
+            if (count == 0) return;
             const size_t needed = Helper::ChunkIndex(count - 1) + 1;
             chunks.reserve(needed);
             while (chunks.size() < needed)
