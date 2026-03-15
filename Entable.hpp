@@ -413,7 +413,7 @@ namespace entable {
 
 			const uint32_t index = EntityToIndex(entity);
 
-			for_each_tuple([&entity, index](auto& s) {
+			for_each_tuple([index](auto& s) {
 				s.Kill(index);
 			}, storages);
 
