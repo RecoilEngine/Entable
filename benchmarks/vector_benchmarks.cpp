@@ -217,6 +217,38 @@ static void BM_ChunkedArray_EnsureSizeThenFill(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * n);
 }
 
+// --- ForEachChunk: chunk-span iteration (the optimized bulk path) ---
+
+template <typename T>
+static void BM_Vector_ForEachChunk(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    std::vector<T> v(n, T{});
+    for (auto _ : state) {
+        T sum{};
+        // Simulate the same work: iterate all elements sequentially
+        for (const auto& x : v)
+            sum = static_cast<T>(sum + x);
+        benchmark::DoNotOptimize(sum);
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+template <typename T>
+static void BM_ChunkedArray_ForEachChunk(benchmark::State& state) {
+    size_t n = static_cast<size_t>(state.range(0));
+    ent::ChunkedArray<T, kChunkSize> v;
+    v.ensure_size(n);
+    for (auto _ : state) {
+        T sum{};
+        v.for_each_chunk([&sum](std::span<const T> chunk) {
+            for (const auto& x : chunk)
+                sum = static_cast<T>(sum + x);
+        });
+        benchmark::DoNotOptimize(sum);
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
 // --- Back: repeated back() read ---
 
 template <typename T>
@@ -264,6 +296,8 @@ static void BM_ChunkedArray_Back(benchmark::State& state) {
     REGISTER_BENCHMARK_FOR_TYPE(BM_ChunkedArray_ReserveThenPushBack, Type) \
     REGISTER_BENCHMARK_FOR_TYPE(BM_Vector_ResizeThenFill, Type) \
     REGISTER_BENCHMARK_FOR_TYPE(BM_ChunkedArray_EnsureSizeThenFill, Type) \
+    REGISTER_BENCHMARK_FOR_TYPE(BM_Vector_ForEachChunk, Type) \
+    REGISTER_BENCHMARK_FOR_TYPE(BM_ChunkedArray_ForEachChunk, Type) \
     REGISTER_BENCHMARK_FOR_TYPE(BM_Vector_Back, Type) \
     REGISTER_BENCHMARK_FOR_TYPE(BM_ChunkedArray_Back, Type)
 

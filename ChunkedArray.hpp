@@ -348,7 +348,7 @@ namespace entable {
 
         // Pre-allocates chunk memory for at least count elements without constructing any.
         void reserve(size_t count) {
-            if (count == 0) return;
+            if (count == 0) [[unlikely]] return;
             const size_t needed = Helper::ChunkIndex(count - 1) + 1;
             chunks.reserve(needed);
             while (chunks.size() < needed)
@@ -359,7 +359,7 @@ namespace entable {
         // Reserves only the outer pointer-vector capacity without allocating chunk memory.
         // Useful when the final element count is known but chunks should be lazy-allocated.
         void reserve_chunk_index_capacity(size_t count) {
-            if (count == 0) return;
+            if (count == 0) [[unlikely]] return;
             chunks.reserve(Helper::ChunkIndex(count - 1) + 1);
         }
 
@@ -500,14 +500,14 @@ namespace entable {
         std::span<T> get_chunk_span(size_t chunk_idx) noexcept {
             if (chunk_idx >= chunks.size()) [[unlikely]] return {};
             const size_t chunk_base = chunk_idx * CHUNK_SIZE;
-            if (chunk_base >= elemCount) return {};
+            if (chunk_base >= elemCount) [[unlikely]] return {};
             return {chunks[chunk_idx].get(), std::min(CHUNK_SIZE, elemCount - chunk_base)};
         }
 
         std::span<const T> get_chunk_span(size_t chunk_idx) const noexcept {
             if (chunk_idx >= chunks.size()) [[unlikely]] return {};
             const size_t chunk_base = chunk_idx * CHUNK_SIZE;
-            if (chunk_base >= elemCount) return {};
+            if (chunk_base >= elemCount) [[unlikely]] return {};
             return {chunks[chunk_idx].get(), std::min(CHUNK_SIZE, elemCount - chunk_base)};
         }
 
@@ -534,32 +534,40 @@ namespace entable {
         // Calls f(std::span<T>) for each live chunk in order.
         template<typename F>
         void for_each_chunk(F&& f) {
-            const size_t live = elemCount > 0 ? Helper::ChunkIndex(elemCount - 1) + 1 : 0;
-            for (size_t c = 0; c < live; ++c)
-                f(get_chunk_span(c));
+            if (elemCount == 0) [[unlikely]] return;
+            const size_t live = Helper::ChunkIndex(elemCount - 1) + 1;
+            for (size_t c = 0; c + 1 < live; ++c)
+                f(std::span<T>(chunks[c].get(), CHUNK_SIZE));
+            f(std::span<T>(chunks[live - 1].get(), elemCount - (live - 1) * CHUNK_SIZE));
         }
 
         template<typename F>
         void for_each_chunk(F&& f) const {
-            const size_t live = elemCount > 0 ? Helper::ChunkIndex(elemCount - 1) + 1 : 0;
-            for (size_t c = 0; c < live; ++c)
-                f(get_chunk_span(c));
+            if (elemCount == 0) [[unlikely]] return;
+            const size_t live = Helper::ChunkIndex(elemCount - 1) + 1;
+            for (size_t c = 0; c + 1 < live; ++c)
+                f(std::span<const T>(chunks[c].get(), CHUNK_SIZE));
+            f(std::span<const T>(chunks[live - 1].get(), elemCount - (live - 1) * CHUNK_SIZE));
         }
 
         // Calls f(size_t chunkIndex, std::span<T>) for each live chunk in order.
         // The chunk index enables job-system scheduling and per-chunk bookkeeping.
         template<typename F>
         void for_each_chunk_indexed(F&& f) {
-            const size_t live = elemCount > 0 ? Helper::ChunkIndex(elemCount - 1) + 1 : 0;
-            for (size_t c = 0; c < live; ++c)
-                f(c, get_chunk_span(c));
+            if (elemCount == 0) [[unlikely]] return;
+            const size_t live = Helper::ChunkIndex(elemCount - 1) + 1;
+            for (size_t c = 0; c + 1 < live; ++c)
+                f(c, std::span<T>(chunks[c].get(), CHUNK_SIZE));
+            f(live - 1, std::span<T>(chunks[live - 1].get(), elemCount - (live - 1) * CHUNK_SIZE));
         }
 
         template<typename F>
         void for_each_chunk_indexed(F&& f) const {
-            const size_t live = elemCount > 0 ? Helper::ChunkIndex(elemCount - 1) + 1 : 0;
-            for (size_t c = 0; c < live; ++c)
-                f(c, get_chunk_span(c));
+            if (elemCount == 0) [[unlikely]] return;
+            const size_t live = Helper::ChunkIndex(elemCount - 1) + 1;
+            for (size_t c = 0; c + 1 < live; ++c)
+                f(c, std::span<const T>(chunks[c].get(), CHUNK_SIZE));
+            f(live - 1, std::span<const T>(chunks[live - 1].get(), elemCount - (live - 1) * CHUNK_SIZE));
         }
 
         iterator       begin()        { return iterator(this, 0); }
@@ -600,7 +608,7 @@ namespace entable {
         }
 
         void allocate_chunks_for(size_t count) {
-            if (count == 0) return;
+            if (count == 0) [[unlikely]] return;
             const size_t needed = Helper::ChunkIndex(count - 1) + 1;
             while (chunks.size() < needed)
                 chunks.push_back(make_chunk());
@@ -637,7 +645,7 @@ namespace entable {
 
         void allocate_new_chunk() {
             const size_t next_chunk = Helper::ChunkIndex(elemCount);
-            if (next_chunk >= chunks.size())
+            if (next_chunk >= chunks.size()) [[unlikely]]
                 chunks.push_back(make_chunk());
             T* base = chunks[next_chunk].get();
             m_writePtr = base;
@@ -648,7 +656,7 @@ namespace entable {
             if constexpr (std::is_trivially_destructible_v<T>) {
                 return;
             } else {
-                if (first >= last) return;
+                if (first >= last) [[unlikely]] return;
                 const size_t first_chunk = Helper::ChunkIndex(first);
                 const size_t last_chunk  = Helper::ChunkIndex(last - 1);
                 for (size_t ci = first_chunk; ci <= last_chunk; ++ci) {
@@ -672,14 +680,14 @@ namespace entable {
         // write_chunk >= chunks.size() -> all chunks fully populated (or none allocated);
         //   signal emplace_back to call allocate_new_chunk().
         void update_write_ptr() noexcept {
-            if (chunks.empty()) {
+            if (chunks.empty()) [[unlikely]] {
                 m_writePtr = nullptr;
                 m_chunkEnd = nullptr;
                 return;
             }
             const size_t write_chunk = Helper::ChunkIndex(elemCount);
             const size_t write_off   = Helper::OffsetIndex(elemCount);
-            if (write_chunk < chunks.size()) {
+            if (write_chunk < chunks.size()) [[likely]] {
                 T* base    = chunks[write_chunk].get();
                 m_writePtr = base + write_off;
                 m_chunkEnd = base + CHUNK_SIZE;
