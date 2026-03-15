@@ -487,22 +487,16 @@ namespace recoil {
 
         std::span<T> get_chunk_span(size_t chunk_idx) noexcept {
             if (chunk_idx >= chunks.size()) [[unlikely]] return {};
-            T* start = chunks[chunk_idx].get();
-            if (chunk_idx == chunks.size() - 1) {
-                const size_t base = chunk_idx * CHUNK_SIZE;
-                return {start, elemCount > base ? elemCount - base : 0};
-            }
-            return {start, CHUNK_SIZE};
+            const size_t chunk_base = chunk_idx * CHUNK_SIZE;
+            if (chunk_base >= elemCount) return {};
+            return {chunks[chunk_idx].get(), std::min(CHUNK_SIZE, elemCount - chunk_base)};
         }
 
         std::span<const T> get_chunk_span(size_t chunk_idx) const noexcept {
             if (chunk_idx >= chunks.size()) [[unlikely]] return {};
-            const T* start = chunks[chunk_idx].get();
-            if (chunk_idx == chunks.size() - 1) {
-                const size_t base = chunk_idx * CHUNK_SIZE;
-                return {start, elemCount > base ? elemCount - base : 0};
-            }
-            return {start, CHUNK_SIZE};
+            const size_t chunk_base = chunk_idx * CHUNK_SIZE;
+            if (chunk_base >= elemCount) return {};
+            return {chunks[chunk_idx].get(), std::min(CHUNK_SIZE, elemCount - chunk_base)};
         }
 
         // -----------------------------------------------------------------------
